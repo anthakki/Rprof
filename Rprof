@@ -1,0 +1,122 @@
+#!/usr/bin/env Rscript
+
+#
+# command line wrapper for the R profiler
+#
+
+#. get script name
+get_Rscript_filename <- function() {
+	return ( ( function(re, args) 
+			return (sub(re, '\\1', args[grep(re, args)[1]])) )(
+				'^--file=(.*)$', commandArgs() ) )
+}
+
+#. parse command line arguments
+parseArgs <- function(args, options = list(), long.names = c()) {
+	# set up mask
+	mask <- rep(TRUE, length(args))
+
+	# make option regexps
+	lo.re <- '^--([^=]*)(?:=(.*))?$'
+	lo.re.noarg <- '^--([^=]*)$'
+	so.re <- '^-([^-])(.*)$'
+	so.re.noarg <- '^-([^-])$'
+
+	# interpret value
+	cast.value <- function(optarg) {
+		if (optarg == '')
+			return (TRUE)
+		else
+			return (type.convert(optarg, as.is = TRUE))
+	}
+
+	# coalesce argument options
+	fuse <- FALSE
+	for (j in which(mask))
+		if (fuse) {
+			args[j-1L] <- sprintf('%s=%s', args[j-1L], args[j])
+			mask[j] <- FALSE
+			fuse <- FALSE
+		}
+		else if (grepl(lo.re.noarg, args[j]))
+			fuse <- TRUE
+		else if (grepl(so.re.noarg, args[j])) {
+			args[j] <- sprintf('--%s', long.names[sub(so.re.noarg, '\\1', args[j])])
+			fuse <- TRUE
+		}
+
+	# parse options
+	for (j in which(mask)) {
+		if (grepl(lo.re, args[j])) {
+			options[[ sub(lo.re, '\\1', args[j]) ]] <-
+				cast.value( sub(lo.re, '\\2', args[j]) )
+			mask[j] <- FALSE
+		}
+		else if (grepl(so.re, args[j])) {
+			options[[ long.names[ sub(so.re, '\\1', args[j]) ] ]] <-
+				cast.value( sub(so.re, '\\2', args[j]) )
+			mask[j] <- FALSE
+		}
+	}
+
+	return (list( args = args[mask], options = options ))
+}
+
+
+#. print usage
+usage <- function() {
+	write(sprintf('Usage: %s record [options] [-o Rprof.out] script.R',
+		get_Rscript_filename()), file = stderr())
+	write(sprintf('       %s summary [options] [Rprof.out]',
+		get_Rscript_filename()), file = stderr())
+	write(sprintf('Options:
+  -o Rprof.out : Output file name
+  -a FALSE     : Append to output file
+  -i 0.02      : Sampling interval
+  -m FALSE     : Memory profiling (\'tseries\', \'stats\', \'both\' for summary)
+  -g FALSE     : GC profiling
+  -l FALSE     : Line profiling (\'show\', \'both\' for summary)
+  -f FALSE     : Filter callframes
+  -s 2         : Stack trace depth
+  -d [TRUE]    : Differential memory summary'), file = stderr())
+	quit(status = 1L)
+}
+
+#. record command
+do.record <- function(script, filename = 'Rprof.out', ...) {
+	# profiler on
+	Rprof(filename = filename, ...)
+
+	# run file
+	source(script)
+
+	# profiler off
+	Rprof(filename = NULL)
+}
+
+#. summary command
+do.summary <- function(filename = 'Rprof.out', ...) {
+	# get summary
+	summaryRprof(filename = filename, ...)
+}
+
+# parse arguments
+parse <- parseArgs( commandArgs(trailingOnly = TRUE),
+	long.names = c('o' = 'filename', 'a' = 'append', 'i' = 'interval',
+		'm' = 'memory', 'g' = 'gc', 'l' = 'line', 'f' = 'filter.callframes',
+		's' = 'index', 'd' = 'diff') )
+
+# check for empty arguments
+if (length(parse$args) < 1L)
+	usage()
+
+# get verb & options
+verb <- parse$args[1]
+opts <- as.list( parse$args[-1] )
+opts[names(parse$options)] <- parse$options
+
+# run
+do.call( switch( verb,
+	'record' = do.record,
+	'summary' = do.summary,
+	( function(...) usage() ) ), opts )
