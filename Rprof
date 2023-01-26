@@ -76,16 +76,16 @@ usage <- function() {
   -m FALSE     : Memory profiling (\'tseries\', \'stats\', \'both\' for summary)
   -g FALSE     : GC profiling
   -l FALSE     : Line profiling (\'show\', \'both\' for summary)
-  -f FALSE     : Filter callframes
+  -f [TRUE]    : Filter callframes
   -s 2         : Stack trace depth
   -d [TRUE]    : Differential memory summary'), file = stderr())
 	quit(status = 1L)
 }
 
 #. record command
-do.record <- function(script, filename = 'Rprof.out', ...) {
+do.record <- function(script, filename = 'Rprof.out', filter.callframes = TRUE, ...) {
 	# profiler on
-	Rprof(filename = filename, ...)
+	Rprof(filename = filename, filter.callframes = filter.callframes, ...)
 
 	# run file
 	source(script)
